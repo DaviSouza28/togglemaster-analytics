@@ -1,0 +1,90 @@
+name: Analytics Service CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: togglemaster-analytics
+
+jobs:
+  build-test-security:
+    name: Build, Test and Security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install application dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install security and lint tools
+        run: pip install ruff pip-audit bandit
+
+      - name: Syntax check
+        run: python -m compileall -q .
+
+      - name: Lint - Ruff
+        run: ruff check .
+
+      - name: SCA - pip-audit
+        run: pip-audit -r requirements.txt
+
+      - name: SAST - Bandit
+        run: bandit -r . -x ./.venv,./venv -ll
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@v0.35.0
+        with:
+          image-ref: '${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
+          format: table
+          exit-code: '1'
+          severity: CRITICAL
+          ignore-unfixed: true
+          vuln-type: os,library
+
+  publish:
+    name: Publish image to ECR
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build-test-security
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials with OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::921017758649:role/togglemaster-github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
