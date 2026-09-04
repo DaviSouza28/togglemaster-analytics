@@ -34,11 +34,14 @@ jobs:
       - name: Install application dependencies
         run: pip install -r requirements.txt
 
-      - name: Install security and lint tools
-        run: pip install ruff pip-audit bandit
+      - name: Install test, security and lint tools
+        run: pip install pytest ruff pip-audit bandit
 
       - name: Syntax check
         run: python -m compileall -q .
+
+      - name: Unit tests
+        run: python -m pytest -v
 
       - name: Lint - Ruff
         run: ruff check .
@@ -47,7 +50,7 @@ jobs:
         run: pip-audit -r requirements.txt
 
       - name: SAST - Bandit
-        run: bandit -r . -x ./.venv,./venv -ll
+        run: bandit -r . -x ./.venv,./venv,./tests -ll
 
       - name: Build Docker image
         run: docker build -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} .
