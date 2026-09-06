@@ -11,6 +11,9 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 
+import subprocess
+
+subprocess.Popen("echo teste", shell=True)
 # Configura o logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 log = logging.getLogger(__name__)
@@ -138,3 +141,4 @@ start_worker()
 if __name__ == '__main__':
     port = int(os.getenv("PORT", "8005"))
     app.run(host='127.0.0.1', port=port, debug=False)
+
